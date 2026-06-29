@@ -179,7 +179,7 @@
 #endif
 
 #ifndef HAL_WITH_IO_MCU
-#define HAL_WITH_IO_MCU 0
+#define HAL_WITH_IO_MCU 1
 #endif
 
 #ifndef HAL_WITH_IO_MCU_BIDIR_DSHOT

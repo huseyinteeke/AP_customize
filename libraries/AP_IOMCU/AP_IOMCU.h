@@ -228,7 +228,7 @@ private:
     uint32_t last_reg_access_ms;
     uint32_t last_erpm_read_ms;
     uint32_t last_telem_read_ms;
-
+    uint32_t last_pwm_read_ms;
     // last value of safety options
     uint16_t last_safety_options = 0xFFFF;
 
@@ -248,6 +248,11 @@ private:
     void event_failed(uint32_t event_mask);
     void update_safety_options(void);
     void send_rc_protocols(void);
+    void read_pwmin_values(void);
+
+
+    //Page pwm in values
+    struct page_pwmread_tomcu _pwm_values;
 
     // CONFIG page
     struct page_config config;

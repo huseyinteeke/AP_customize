@@ -386,11 +386,11 @@ bool AP_IOMCU::verify_rev2(uint32_t size)
             uint8_t c;
             ret = recv_byte_with_timeout(&c, 5000);
             if (!ret) {
-                debug("%d: got %d waiting for bytes", sent + i, ret);
+                //debug("%d: got %d waiting for bytes", (sent + i), ret);
                 return ret;
             }
             if (c != fw[sent+i]) {
-                debug("%d: got 0x%02x expected 0x%02x", sent + i, c, fw[sent+i]);
+                //debug("%d: got 0x%02x expected 0x%02x", sent + i, c, fw[sent+i]);
                 return false;
             }
         }

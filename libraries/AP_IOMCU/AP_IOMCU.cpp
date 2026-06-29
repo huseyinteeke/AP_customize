@@ -20,8 +20,18 @@
 #include <AP_Logger/AP_Logger.h>
 #include <AP_Arming/AP_Arming.h>
 #include <AP_BLHeli/AP_BLHeli.h>
+
+
+
+
 #include <ch.h>
+
 #include <AP_SerialManager/AP_SerialManager.h>
+
+
+#include <GCS_MAVLink/GCS.h>
+
+
 
 extern const AP_HAL::HAL &hal;
 
@@ -368,6 +378,14 @@ void AP_IOMCU::thread_main(void)
             }
         }
 
+
+
+        if (now - last_pwm_read_ms > 100)
+        {
+            read_pwmin_values();
+            last_pwm_read_ms = now;
+        }
+
         send_rc_protocols();
     }
     done_shutdown = true;
@@ -444,6 +462,34 @@ void AP_IOMCU::read_erpm()
         }
     }
 }
+
+
+
+
+/*
+
+    read incoming PWM values from IOMCU
+*/
+
+void AP_IOMCU::read_pwmin_values(void)
+{
+    struct page_pwmread_tomcu* pwm = &_pwm_values;
+    uint16_t *r = (uint16_t *)(pwm);
+
+    iopage page = PAGE_IO_PWM_READ;
+
+    if (!read_registers(page, 0, sizeof(page_pwmread_tomcu)/2, r)) {
+        gcs().send_text(MAV_SEVERITY_INFO , "Cannot get the data");
+        return;
+    }else
+    {
+        gcs().send_text(MAV_SEVERITY_INFO , "I have the data: %d , %d , %d , %d , %d , %d" 
+            , pwm->values[0] , pwm->values[1] , pwm->values[2] , pwm->values[3] , pwm->values[4] , pwm->values[5] );
+        return;
+    }
+
+}
+
 
 /*
   read dshot telemetry
@@ -1092,6 +1138,10 @@ void AP_IOMCU::send_rc_protocols()
         last_rc_protocols = v;
     }
 }
+
+
+
+
 
 /*
   check ROMFS firmware against CRC on IOMCU, and if incorrect then upload new firmware

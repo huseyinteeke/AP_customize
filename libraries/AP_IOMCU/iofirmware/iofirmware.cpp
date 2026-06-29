@@ -919,6 +919,12 @@ bool AP_IOMCU_FW::handle_code_read()
     case PAGE_SERVOS:
         COPY_PAGE(reg_servo);
         break;
+
+
+    case PAGE_IO_PWM_READ:
+        COPY_PAGE(pwm_to_send);
+        break;
+
     default:
         return false;
     }

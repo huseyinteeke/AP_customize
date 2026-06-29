@@ -81,6 +81,7 @@ enum iopage {
 #if AP_IOMCU_PROFILED_SUPPORT_ENABLED
     PAGE_PROFILED = 208,
 #endif
+    PAGE_IO_PWM_READ = 212
 };
 
 // setup page registers
@@ -245,6 +246,14 @@ struct page_dshot_telem {
     uint8_t   edt2_stress[4];
 #endif
 };
+
+
+
+struct page_pwmread_tomcu
+{
+    uint16_t values[8];
+};
+
 
 #if AP_IOMCU_PROFILED_SUPPORT_ENABLED
 struct __attribute__((packed, aligned(2))) page_profiled {

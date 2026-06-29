@@ -96,6 +96,9 @@ public:
     bool profiled_control_enabled;
 #endif
 
+    struct page_pwmread_tomcu pwm_to_send;
+
+
     // CONFIG values
     struct page_config config;
 
@@ -202,6 +205,8 @@ public:
     uint8_t dsm_bind_state;
     uint32_t last_dsm_bind_ms;
     uint32_t last_failsafe_ms;
+
+
 };
 
 // GPIO macros
