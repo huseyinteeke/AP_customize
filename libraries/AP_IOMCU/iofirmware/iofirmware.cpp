@@ -917,6 +917,22 @@ bool AP_IOMCU_FW::handle_code_read()
         COPY_PAGE(reg_status);
         break;
     case PAGE_SERVOS:
+        reg_servo.pwm[0] = 1300;
+        reg_servo.pwm[1] = 1200;
+        reg_servo.pwm[2] = 1400;
+        reg_servo.pwm[3] = 1700;
+        reg_servo.pwm[4] = 1800;
+        reg_servo.pwm[5] = 1000;
+        reg_servo.pwm[6] = 1300;
+        reg_servo.pwm[7] = 1300;
+        reg_servo.pwm[8] = 1300;
+        reg_servo.pwm[9] = 1300;
+        reg_servo.pwm[10] = 1400;
+        reg_servo.pwm[11] = 1300;
+        reg_servo.pwm[12] = 1300;
+        reg_servo.pwm[13] = 1600;
+        reg_servo.pwm[14] = 1300;
+
         COPY_PAGE(reg_servo);
         break;
 

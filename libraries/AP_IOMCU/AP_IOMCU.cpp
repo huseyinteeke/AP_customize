@@ -382,7 +382,7 @@ void AP_IOMCU::thread_main(void)
 
         if (now - last_pwm_read_ms > 100)
         {
-            read_pwmin_values();
+            //read_pwmin_values();
             last_pwm_read_ms = now;
         }
 
@@ -424,17 +424,76 @@ void AP_IOMCU::send_servo_out()
  */
 void AP_IOMCU::read_rc_input()
 {
-    uint16_t *r = (uint16_t *)&rc_input;
-    if (!read_registers(PAGE_RAW_RCIN, 0, sizeof(rc_input)/2, r)) {
-        return;
+     uint16_t r[PKT_MAX_REGS];
+
+    if (!read_registers(PAGE_RAW_RCIN, 0,
+                        sizeof(r)/sizeof(r[0]),
+                        r)) {
+    
+                            return;
     }
+
+
+     rc_input.count = r[0];
+
+    uint8_t flags = r[1];
+    rc_input.flags_failsafe = flags & 0x01;
+    rc_input.flags_rc_ok    = (flags >> 1) & 0x01;
+
+    rc_input.rc_protocol = r[2];
+
+    for (uint8_t i = 0; i < IOMCU_MAX_RC_CHANNELS; i++) {
+        rc_input.pwm[i] = r[3 + i];
+    }
+
+    rc_input.rssi = (int16_t)r[3 + IOMCU_MAX_RC_CHANNELS];
+
     if (rc_input.flags_failsafe && rc().option_is_enabled(RC_Channels::Option::IGNORE_FAILSAFE)) {
         rc_input.flags_failsafe = false;
     }
     if (rc_input.flags_rc_ok && !rc_input.flags_failsafe) {
         rc_last_input_ms = AP_HAL::millis();
     }
+
+
+    gcs().send_text(MAV_SEVERITY_INFO , "Pwm :   %d %d %d %d %d %d " , 
+        rc_input.pwm[0],
+        rc_input.pwm[1],
+        rc_input.pwm[2],
+        rc_input.pwm[3],
+        rc_input.pwm[4],
+        rc_input.pwm[5]
+    );
+
+
 }
+
+
+/*
+
+    read incoming PWM values from IOMCU
+*/
+
+void AP_IOMCU::read_pwmin_values(void)
+{
+    struct page_pwmread_tomcu* pwm = &_pwm_values;
+    uint16_t *r = (uint16_t *)(pwm);
+
+    iopage page = PAGE_IO_PWM_READ;
+
+    if (!read_registers(page, 0, sizeof(page_pwmread_tomcu)/2, r)) {
+        gcs().send_text(MAV_SEVERITY_INFO , "Cannot get the data");
+        return;
+    }else
+    {
+        gcs().send_text(MAV_SEVERITY_INFO , "I have the data: %d , %d , %d , %d , %d , %d" 
+            , pwm->values[0] , pwm->values[1] , pwm->values[2] , pwm->values[3] , pwm->values[4] , pwm->values[5] );
+        return;
+    }
+
+}
+
+
 
 #if HAL_WITH_IO_MCU_BIDIR_DSHOT
 /*
@@ -466,29 +525,6 @@ void AP_IOMCU::read_erpm()
 
 
 
-/*
-
-    read incoming PWM values from IOMCU
-*/
-
-void AP_IOMCU::read_pwmin_values(void)
-{
-    struct page_pwmread_tomcu* pwm = &_pwm_values;
-    uint16_t *r = (uint16_t *)(pwm);
-
-    iopage page = PAGE_IO_PWM_READ;
-
-    if (!read_registers(page, 0, sizeof(page_pwmread_tomcu)/2, r)) {
-        gcs().send_text(MAV_SEVERITY_INFO , "Cannot get the data");
-        return;
-    }else
-    {
-        gcs().send_text(MAV_SEVERITY_INFO , "I have the data: %d , %d , %d , %d , %d , %d" 
-            , pwm->values[0] , pwm->values[1] , pwm->values[2] , pwm->values[3] , pwm->values[4] , pwm->values[5] );
-        return;
-    }
-
-}
 
 
 /*
@@ -577,7 +613,7 @@ void AP_IOMCU::write_log()
     if (now - last_log_ms >= 1000U) {
         last_log_ms = now;
 #if HAL_LOGGING_ENABLED
-        if (AP_Logger::get_singleton()) {
+       
 // @LoggerMessage: IOMC
 // @Description: IOMCU diagnostic information
 // @Field: TimeUS: Time since system startup
@@ -588,16 +624,17 @@ void AP_IOMCU::write_log()
 // @Field: Nerr: Protocol failures on MCU side
 // @Field: Nerr2: Reported number of failures on IOMCU side
 // @Field: NDel: Number of delayed packets received by MCU
-            AP::logger().WriteStreaming("IOMC", "TimeUS,RSErr,Mem,TS,NPkt,Nerr,Nerr2,NDel", "QHHIIIII",
-                               AP_HAL::micros64(),
-                               read_status_errors,
-                               reg_status.freemem,
-                               reg_status.timestamp_ms,
-                               reg_status.total_pkts,
-                               total_errors,
-                               reg_status.num_errors,
-                               num_delayed);
-        }
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "TimeUS=%llu RSErr=%lu Mem=%u TS=%lu NPkt=%lu Nerr=%lu Nerr2=%lu NDel=%lu",
+        (unsigned long long)AP_HAL::micros64(),
+        read_status_errors,
+        reg_status.freemem,
+        reg_status.timestamp_ms,
+        reg_status.total_pkts,
+        total_errors,
+        reg_status.num_errors,
+        num_delayed);
+        
 #endif  // HAL_LOGGING_ENABLED
 #if IOMCU_DEBUG_ENABLE
         static uint32_t last_io_print;
@@ -628,8 +665,25 @@ void AP_IOMCU::write_log()
  */
 void AP_IOMCU::read_servo()
 {
+    gcs().send_text(MAV_SEVERITY_INFO, "read_servo CALLED %d" , pwm_out.num_channels);
     if (pwm_out.num_channels > 0) {
-        read_registers(PAGE_SERVOS, 0, pwm_out.num_channels, pwm_in.pwm);
+        if(read_registers(PAGE_SERVOS, 0, pwm_out.num_channels, pwm_in.pwm))
+        {
+            gcs().send_text(MAV_SEVERITY_INFO , "PWM: %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d  " , pwm_in.pwm[0] ,
+                pwm_in.pwm[1]  , pwm_in.pwm[2] , 
+                pwm_in.pwm[3]  , pwm_in.pwm[4] ,
+                pwm_in.pwm[5]  , pwm_in.pwm[6] ,
+                pwm_in.pwm[7]  , pwm_in.pwm[8] ,
+                pwm_in.pwm[9]  , pwm_in.pwm[10] ,
+                pwm_in.pwm[11]  , pwm_in.pwm[12] ,
+                pwm_in.pwm[13]  , pwm_in.pwm[14]
+                        );
+        }else 
+        {
+            gcs().send_text(MAV_SEVERITY_INFO , "Sana noldu amk" );
+        }
+
+
     }
 }
 
@@ -664,10 +718,20 @@ size_t AP_IOMCU::write_wait(const uint8_t *pkt, uint8_t len)
 */
 bool AP_IOMCU::read_registers(uint8_t page, uint8_t offset, uint8_t count, uint16_t *regs)
 {
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "READ_IN page=%u off=%u cnt=%u",
+        page, offset, count);
+
     while (count > PKT_MAX_REGS) {
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "SPLIT page=%u off=%u cnt=%u",
+            page, offset, count);
+
         if (!read_registers(page, offset, PKT_MAX_REGS, regs)) {
+            gcs().send_text(MAV_SEVERITY_INFO, "SPLIT_FAIL");
             return false;
         }
+
         offset += PKT_MAX_REGS;
         count -= PKT_MAX_REGS;
         regs += PKT_MAX_REGS;
@@ -677,7 +741,7 @@ bool AP_IOMCU::read_registers(uint8_t page, uint8_t offset, uint8_t count, uint1
 
     discard_input();
 
-    memset(&pkt.regs[0], 0, count*2);
+    memset(&pkt.regs[0], 0, count * 2);
 
     pkt.code = CODE_READ;
     pkt.count = count;
@@ -686,81 +750,140 @@ bool AP_IOMCU::read_registers(uint8_t page, uint8_t offset, uint8_t count, uint1
     pkt.crc = 0;
 
     uint8_t pkt_size = pkt.get_size();
+
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "PKT_BUILD page=%u off=%u cnt=%u size=%u",
+        page, offset, count, pkt_size);
+
     if (is_chibios_backend) {
-        /*
-          the original read protocol is a bit strange, as it
-          unnecessarily sends the same size packet that it expects to
-          receive. This means reading a large number of registers
-          wastes a lot of serial bandwidth. We avoid this overhead
-          when we know we are talking to a ChibiOS backend
-        */
-        pkt_size = 4;
+        pkt_size = pkt.get_size();
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "CHIBIOS_FAST_MODE size=%u",
+            pkt_size);
     }
 
     pkt.crc = crc_crc8((const uint8_t *)&pkt, pkt_size);
 
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "TX page=%u off=%u cnt=%u crc=%u size=%u",
+        page, offset, count, pkt.crc, pkt_size);
+
     size_t ret = write_wait((uint8_t *)&pkt, pkt_size);
 
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "WRITE_RET=%u expected=%u",
+        (unsigned)ret, pkt_size);
+
     if (ret != pkt_size) {
-        debug("write failed1 %u %u %u\n", unsigned(pkt_size), page, offset);
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "WRITE_FAIL page=%u off=%u cnt=%u",
+            page, offset, count);
+
         protocol_fail_count++;
         return false;
     }
 
-    // wait for the expected number of reply bytes or timeout
-    if (!uart.wait_timeout(count*2+4, 10)) {
-        debug("t=%lu timeout read page=%u offset=%u count=%u avail=%u\n",
-              AP_HAL::millis(), page, offset, count, uart.available());
+    if (!uart.wait_timeout(count * 2 + 4, 10)) {
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "TIMEOUT page=%u off=%u cnt=%u avail=%lu",
+            page, offset, count, uart.available());
+
         protocol_fail_count++;
         return false;
     }
 
     uint8_t *b = (uint8_t *)&pkt;
     uint8_t n = uart.available();
+
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "UART_AVAIL=%u expected_min=%u",
+        n, offsetof(struct IOPacket, regs));
+
     if (n < offsetof(struct IOPacket, regs)) {
-        debug("t=%lu small pkt %u\n", AP_HAL::millis(), n);
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "SMALL_PKT n=%u",
+            n);
+
         protocol_fail_count++;
         return false;
     }
+
     if (pkt.get_size() != n) {
-        debug("t=%lu bad len %u %u\n", AP_HAL::millis(), n, pkt.get_size());
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "BAD_LEN got=%u expected=%u",
+            n, pkt.get_size());
+
         protocol_fail_count++;
         return false;
     }
+
     uart.read(b, MIN(n, sizeof(pkt)));
+
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "RX_OK page=%u off=%u cnt=%u n=%u",
+        page, offset, count, n);
 
     uint8_t got_crc = pkt.crc;
     pkt.crc = 0;
+
     uint8_t expected_crc = crc_crc8((const uint8_t *)&pkt, pkt.get_size());
+
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "CRC got=%u expected=%u",
+        got_crc, expected_crc);
+
     if (got_crc != expected_crc) {
-        debug("t=%lu bad crc %02x should be %02x n=%u %u/%u/%u\n",
-              AP_HAL::millis(), got_crc, expected_crc,
-              n, page, offset, count);
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "CRC_FAIL page=%u off=%u cnt=%u",
+            page, offset, count);
+
         protocol_fail_count++;
         return false;
     }
 
     if (pkt.code != CODE_SUCCESS) {
-        debug("bad code %02x read %u/%u/%u\n", pkt.code, page, offset, count);
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "BAD_CODE=%u page=%u",
+            pkt.code, page);
+
         protocol_fail_count++;
         return false;
     }
+
     if (pkt.count < count) {
-        debug("bad count %u read %u/%u/%u n=%u\n", pkt.count, page, offset, count, n);
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "BAD_COUNT pkt=%u req=%u",
+            pkt.count, count);
+
         protocol_fail_count++;
         return false;
     }
-    memcpy(regs, pkt.regs, count*2);
+
+    memcpy(regs, pkt.regs, count * 2);
+
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "MEMCPY_OK page=%u cnt=%u first=%u",
+        page, count, regs[0]);
+
     if (protocol_fail_count > IOMCU_MAX_REPEATED_FAILURES) {
+        gcs().send_text(MAV_SEVERITY_INFO,
+            "REPEATED_FAILURES=%lu",
+            protocol_fail_count);
+
         handle_repeated_failures();
     }
+
     total_errors += protocol_fail_count;
     protocol_fail_count = 0;
     protocol_count++;
     last_reg_access_ms = AP_HAL::millis();
+
+    gcs().send_text(MAV_SEVERITY_INFO,
+        "READ_OK page=%u total_pkts=%lu",
+        page, protocol_count);
+
     return true;
 }
-
 /*
   write count 16 bit registers
 */
